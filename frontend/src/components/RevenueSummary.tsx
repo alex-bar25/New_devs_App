@@ -3,12 +3,24 @@ import { SecureAPI } from '../lib/secureApi';
 
 interface RevenueData {
     property_id: string;
-    total_revenue: number;
+    total_revenue: string;   // exact decimal string - never a float
+    total_exact: string;     // full stored precision, e.g. "2250.000"
     currency: string;
     reservations_count: number;
     month?: number | null;
     year?: number | null;
 }
+
+/**
+ * Adds thousands separators without going through Number, so no cent is ever
+ * lost to binary floating point. The backend has already rounded to 2dp.
+ */
+const formatMoney = (amount: string): string => {
+    const [whole, fraction = '00'] = amount.split('.');
+    const sign = whole.startsWith('-') ? '-' : '';
+    const digits = whole.replace('-', '');
+    return `${sign}${digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction}`;
+};
 
 interface RevenueSummaryProps {
     propertyId?: string;
@@ -72,8 +84,6 @@ export const RevenueSummary: React.FC<RevenueSummaryProps> = ({ propertyId = 'pr
     if (error) return <div className="p-4 text-red-500 bg-red-50 rounded-lg">{error}</div>;
     if (!data) return null;
 
-    const displayTotal = Math.round(data.total_revenue * 100) / 100;
-
     // Month is resolved in the property's own timezone by the backend.
     const periodLabel = data.month && data.year
         ? `${MONTH_NAMES[data.month - 1]} ${data.year}`
@@ -94,7 +104,7 @@ export const RevenueSummary: React.FC<RevenueSummaryProps> = ({ propertyId = 'pr
                         <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">{periodLabel} Revenue</h2>
                         <div className="flex items-baseline gap-2 mt-1">
                             <span className="text-3xl font-bold text-gray-900 tracking-tight">
-                                {data.currency} {displayTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {data.currency} {formatMoney(data.total_revenue)}
                             </span>
                             {/* Fake trend indicator for premium feel */}
                             <span className="inline-flex items-baseline px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 md:mt-2 lg:mt-0">
@@ -118,9 +128,9 @@ export const RevenueSummary: React.FC<RevenueSummaryProps> = ({ propertyId = 'pr
                     </div>
                 </div>
 
-                {/* Precision Warning Area */}
+                {/* Precision Warning Area: stored value carries sub-cent detail */}
                 <div className="mt-4 h-6">
-                    {Math.abs(data.total_revenue - displayTotal) > 0.000001 && showRaw && (
+                    {data.total_exact !== data.total_revenue && showRaw && (
                         <div className="flex items-center text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
                             <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />

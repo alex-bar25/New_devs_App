@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Dict, Any, Optional
+from decimal import Decimal, ROUND_HALF_UP
 from app.services.cache import get_revenue_summary
 from app.core.auth import authenticate_request as get_current_user
 
@@ -17,11 +18,19 @@ async def get_dashboard_summary(
 
     revenue_data = await get_revenue_summary(property_id, tenant_id, month, year)
 
-    total_revenue_float = float(revenue_data['total'])
+    # Money is never converted to float. total_amount is NUMERIC(10,3) for
+    # sub-cent tracking, and binary float cannot represent most decimal
+    # fractions exactly. The exact value is sent as a string; `total_exact`
+    # keeps the stored precision, `total_revenue` is the rounded currency
+    # figure, derived with ROUND_HALF_UP on the total (never by summing
+    # already-rounded rows, which loses a cent per sub-cent booking).
+    total_exact = Decimal(revenue_data['total'])
+    total_display = total_exact.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
     return {
         "property_id": revenue_data['property_id'],
-        "total_revenue": total_revenue_float,
+        "total_revenue": str(total_display),
+        "total_exact": str(total_exact),
         "currency": revenue_data['currency'],
         "reservations_count": revenue_data['count'],
         "month": revenue_data.get('month'),

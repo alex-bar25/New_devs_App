@@ -43,3 +43,20 @@ From my understading this is because of `backend/app/services/cache.py:19` this 
 - Whoever queried first populated the key; everyone else read it for the 300s TTL. Hence "sometimes on refresh" — on a cold cache each tenant got correct data, so it looked random.
 
 - Leak could also happen  bidirectional: Ocean could just as easily leak into Sunset.
+
+# Finance Team
+
+Additionally, our finance team mentioned they've noticed some revenue totals that seem "slightly off" by a few cents here and there, but they couldn't pin down exactly when or why.
+
+The issue was revenue totals lose cents to floating point / premature rounding
+
+- database/schema.sql:28 — total_amount is NUMERIC(10,3), annotated "to allow sub-cent precision tracking". So the third decimal is deliberate and must survive the round trip.
+
+- Three of Beach House Alpha's bookings are stored at 333.333, 333.333, 333.334 — exactly 1000.000 together. Displayed to the cent they're 333.33 each, summing to 999.99. One cent evaporates. That's the "few cents here and there": no individual line is wrong, so it only shows when you reconcile rows against the total, and only for the minority of 
+bookings whose third decimal isn't zero.
+
+- api/v1/dashboard.py:20 — float(revenue_data['total']) pushed money through binary float. On today's data it happens to be lossless (the SUM runs in Postgres as exact NUMERIC), so this was latent rather than active — but it's wrong in principle and breaks the moment a total lands on a value float can't represent.
+
+- `components/RevenueSummary.tsx:64` — Math.round(data.total_revenue * 100) / 100, the same mistake client-side. In JS 1080.4 * 100 is already 108040.00000000001.
+
+- Fix: the endpoint keeps Decimal throughout, rounds once with ROUND_HALF_UP on the total (never by summing pre-rounded rows), and returns total_revenue as an exact string plus total_exact at full stored precision. The frontend formats the string directly with a formatMoney helper — thousands separators via regex, never Number.
