@@ -26,7 +26,19 @@
 
 - `frontend` — dashboard requests March 2024 and the card heading reads "March 2024 Revenue" instead of the vague "Total Revenue".
 
-This fixes the Client A Issue
+3. Fallback Fix
+
+- services/reservations.py:115-136 — calculate_total_revenue wrapped everything in try/except Exception and, on any failure, returned a hardcoded lookup table (prop-001: 1000.00/3, etc.) with HTTP 200. A total database outage was indistinguishable from a healthy response.
+
+- This is what hid the broken connection pool. The dashboard served fabricated numbers from day one and nothing alerted, because the failure path returned success. Clients reconciled their board figures against invented data.
+
+- The mock values weren't random either — prop-001: 1000.00/3 is exactly the naive-UTC answer, so the mock also encoded the timezone bug and made the two agree.
+- Fix: deleted the mock table and the blanket except. Errors now propagate; dashboard.py catches, logs with logger.exception, and returns 503 with a retry message rather than a 
+fabricated total. Also replaced the print() with proper logging, and dropped the redundant if db_pool.session_factory / else: raise dance.
+
+- Swapped GROUP BY property_id for COALESCE(SUM(...), 0) so a property with no reservations returns one row of zeros rather than no row at all.
+
+- Nothing is written to Redis on the failure path, so an outage can't poison the cache for 300s.
 
 # Client B
 
