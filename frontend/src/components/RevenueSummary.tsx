@@ -6,15 +6,24 @@ interface RevenueData {
     total_revenue: number;
     currency: string;
     reservations_count: number;
+    month?: number | null;
+    year?: number | null;
 }
 
 interface RevenueSummaryProps {
     propertyId?: string;
-    debugTenant?: string; 
+    debugTenant?: string;
     showRaw?: boolean;
+    month?: number;
+    year?: number;
 }
 
-export const RevenueSummary: React.FC<RevenueSummaryProps> = ({ propertyId = 'prop-001', debugTenant, showRaw }) => {
+const MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+export const RevenueSummary: React.FC<RevenueSummaryProps> = ({ propertyId = 'prop-001', debugTenant, showRaw, month, year }) => {
     const [data, setData] = useState<RevenueData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -29,7 +38,9 @@ export const RevenueSummary: React.FC<RevenueSummaryProps> = ({ propertyId = 'pr
                 // We pass the simulatedTenant option which SecureAPI will attach as a header
                 const response = await SecureAPI.getDashboardSummary(propertyId, {
                     simulatedTenant: activeTenant,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    month,
+                    year
                 });
                 setData(response);
             } catch (err) {
@@ -41,7 +52,7 @@ export const RevenueSummary: React.FC<RevenueSummaryProps> = ({ propertyId = 'pr
         };
 
         fetchRevenue();
-    }, [propertyId, activeTenant]);
+    }, [propertyId, activeTenant, month, year]);
 
     if (loading) {
         return (
@@ -63,6 +74,11 @@ export const RevenueSummary: React.FC<RevenueSummaryProps> = ({ propertyId = 'pr
 
     const displayTotal = Math.round(data.total_revenue * 100) / 100;
 
+    // Month is resolved in the property's own timezone by the backend.
+    const periodLabel = data.month && data.year
+        ? `${MONTH_NAMES[data.month - 1]} ${data.year}`
+        : 'All Time';
+
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow duration-300">
             {showRaw && (
@@ -75,7 +91,7 @@ export const RevenueSummary: React.FC<RevenueSummaryProps> = ({ propertyId = 'pr
             <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
                     <div>
-                        <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Revenue</h2>
+                        <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">{periodLabel} Revenue</h2>
                         <div className="flex items-baseline gap-2 mt-1">
                             <span className="text-3xl font-bold text-gray-900 tracking-tight">
                                 {data.currency} {displayTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

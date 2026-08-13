@@ -12,3 +12,17 @@
 - `backend/app/core/database_pool.py:51` — async def get_session() → def get_session(). Both call sites use it as async with db_pool.get_session() as session, but an async def returns a coroutine, which isn't an async context manager. This threw 'coroutine' object does not support the asynchronous context manager protocol.
 
 - `backend/app/services/reservations.py:40` — was doing db_pool = DatabasePool() + await db_pool.initialize() inside the request, building a fresh engine and connection pool on every call. Now uses the shared module-level db_pool, initializing only if not already up.
+
+2. `calculate_monthly_revenue()` it's never called anywhere 
+
+- `services/reservations.py:5` — `calculate_monthly_revenue()` never ran. It built a SQL string then unconditionally returned Decimal('0'). Signature was also broken: took (property_id, month, year, db_session) while the query referenced a tenant_id that was never passed.
+
+- Rewrote it to execute, joining properties so the month window is anchored to p.timezone: make_timestamp(:year,:month,1,0,0,0) AT TIME ZONE p.timezone. Doing the conversion in Postgres avoids depending on tzdata in the slim image.
+
+- Upper bound uses + interval '1 month', removing the old if month < 12 December special-case.
+
+- `api/v1/dashboard.py` — endpoint accepts month/year so a specific period can be requested, and echoes them back.
+
+- `services/cache.py` — dispatches to monthly vs all-time; cache key carries the period.
+
+- `frontend` — dashboard requests March 2024 and the card heading reads "March 2024 Revenue" instead of the vague "Total Revenue".

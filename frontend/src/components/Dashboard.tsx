@@ -9,6 +9,10 @@ const PROPERTIES = [
   { id: 'prop-005', name: 'Urban Loft Modern' }
 ];
 
+// The dashboard reports on the current financial period.
+const REPORTING_MONTH = 3;
+const REPORTING_YEAR = 2024;
+
 const Dashboard: React.FC = () => {
   const [selectedProperty, setSelectedProperty] = useState('prop-001');
 
@@ -46,7 +50,11 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="space-y-6">
-            <RevenueSummary propertyId={selectedProperty} />
+            <RevenueSummary
+              propertyId={selectedProperty}
+              month={REPORTING_MONTH}
+              year={REPORTING_YEAR}
+            />
           </div>
         </div>
       </div>
