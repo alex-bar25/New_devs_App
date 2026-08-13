@@ -2,8 +2,7 @@
 
 **Client A (Sunset Properties)** called saying: *"The revenue numbers on your dashboard don't match our internal records. We're showing different totals for March, and we're worried about accuracy for our board meeting next week."*
 
-- First The Client A on the dashboard it's using mock data, from the database USD 1,000.00 / 3 bookings is the hardcoded mock in reservations.py:93-99. Real answer for Beach House Alpha is 2,250.00 / 4 bookings.
-
+1. First The Client A on the dashboard it's using mock data, from the database USD 1,000.00 / 3 bookings is the hardcoded mock in reservations.py:93-99. Real answer for Beach House Alpha is 2,250.00 / 4 bookings.
 
 - `backend/app/core/database_pool.py:18` — connection string was built from settings.supabase_db_user/password/host/port/name, none of which exist on Settings. Raised AttributeError on every startup. Now uses settings.database_url (the one docker-compose actually provides), rewritten to the postgresql+asyncpg:// driver.
 
@@ -26,3 +25,21 @@
 - `services/cache.py` — dispatches to monthly vs all-time; cache key carries the period.
 
 - `frontend` — dashboard requests March 2024 and the card heading reads "March 2024 Revenue" instead of the vague "Total Revenue".
+
+This fixes the Client A Issue
+
+# Client B
+
+**Client B (Ocean Rentals)** mentioned: *"Something strange is happening - sometimes when we refresh the page, we see revenue numbers that look like they belong to another company. This is a serious privacy concern."*
+
+From my understading this is because of `backend/app/services/cache.py:19` this `cache_key = f"revenue:{property_id}:{period}"` because tenant_id is passed into get_revenue_summary() and used correctly in the SQL — but it's missing from the cache key. Property IDs aren't globally unique, they're unique per tenant 
+
+- `services/cache.py:19` — cache key was revenue:{property_id}:{period}, missing tenant_id.
+
+- `tenant_id` was passed into `get_revenue_summary()` and used correctly in the SQL, so the database query was never wrong — the isolation was correct right up until the cache short-circuited it.
+
+- Property IDs are unique per tenant, not globally (PRIMARY KEY (id, tenant_id)). prop-001 = Beach House Alpha for tenant-a and Mountain Lodge Beta for tenant-b — two different properties, two companies, one Redis key.
+
+- Whoever queried first populated the key; everyone else read it for the 300s TTL. Hence "sometimes on refresh" — on a cold cache each tenant got correct data, so it looked random.
+
+- Leak could also happen  bidirectional: Ocean could just as easily leak into Sunset.

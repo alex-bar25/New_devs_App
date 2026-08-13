@@ -15,8 +15,11 @@ async def get_revenue_summary(
     When month and year are supplied the figure is scoped to that month in the
     property's own timezone; otherwise it is all-time revenue.
     """
+    # tenant_id MUST be part of the key: property IDs are unique per tenant
+    # (schema: PRIMARY KEY (id, tenant_id)), so prop-001 is a different property
+    # for each company. Omitting it makes tenants share one cache entry.
     period = f"{year}-{month:02d}" if month and year else "all"
-    cache_key = f"revenue:{property_id}:{period}"
+    cache_key = f"revenue:{tenant_id}:{property_id}:{period}"
 
     # Try to get from cache
     cached = await redis_client.get(cache_key)
